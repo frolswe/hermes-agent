@@ -369,7 +369,9 @@ class TestSignalSendImageFile:
         assert captured[0]["method"] == "send"
         assert captured[0]["params"]["account"] == adapter.account
         assert captured[0]["params"]["recipient"] == ["+155****4567"]
-        assert captured[0]["params"]["attachments"] == [str(img_path)]
+        att = captured[0]["params"]["attachments"][0]
+        assert att.startswith("data:image/png;filename=chart.png;base64,")
+        assert base64.b64decode(att.split(",", 1)[1]) == img_path.read_bytes()
         assert captured[0]["params"]["message"] == ""  # caption=None → ""
         # Typing indicator must be stopped before sending
         adapter._stop_typing_indicator.assert_awaited_once_with("+155****4567")
@@ -450,7 +452,9 @@ class TestSignalSendVoice:
 
         assert result.success is True
         assert captured[0]["method"] == "send"
-        assert captured[0]["params"]["attachments"] == [str(audio_path)]
+        att = captured[0]["params"]["attachments"][0]
+        assert att.startswith("data:audio/ogg;filename=reply.ogg;base64,")
+        assert base64.b64decode(att.split(",", 1)[1]) == audio_path.read_bytes()
         assert captured[0]["params"]["message"] == ""  # caption=None → ""
         adapter._stop_typing_indicator.assert_awaited_once_with("+155****4567")
         assert 1234567890 in adapter._recent_sent_timestamps
@@ -497,7 +501,9 @@ class TestSignalSendVideo:
 
         assert result.success is True
         assert captured[0]["method"] == "send"
-        assert captured[0]["params"]["attachments"] == [str(vid_path)]
+        att = captured[0]["params"]["attachments"][0]
+        assert att.startswith("data:video/mp4;filename=demo.mp4;base64,")
+        assert base64.b64decode(att.split(",", 1)[1]) == vid_path.read_bytes()
         assert captured[0]["params"]["message"] == ""  # caption=None → ""
         adapter._stop_typing_indicator.assert_awaited_once_with("+155****4567")
         assert 1234567890 in adapter._recent_sent_timestamps

@@ -95,6 +95,17 @@ def _ext_to_mime(ext: str) -> str:
     return mime_for_ext(ext, fallback="application/octet-stream")
 
 
+def _file_to_data_uri(file_path: str) -> str:
+    """Read *file_path* and return an RFC 2397 data URI so signal-cli can attach it without
+    sharing a filesystem with Hermes (the daemon may run on a different host). signal-cli
+    URL-decodes the ``filename`` parameter (DataURI.java), so it is percent-encoded here."""
+    path = Path(file_path)
+    mime = _ext_to_mime(path.suffix)
+    filename = quote(path.name)
+    b64 = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{mime};filename={filename};base64,{b64}"
+
+
 def _remux_aac_to_m4a(aac_data: bytes) -> Optional[Tuple[bytes, str]]:
     """Losslessly remux raw ADTS AAC (Android voice notes, rejected by most STT APIs) to .m4a.
     Returns ``(m4a_bytes, ".m4a")``, or ``None`` when ffmpeg is missing/fails (caller keeps the input)."""
@@ -790,7 +801,7 @@ class SignalAdapter(BasePlatformAdapter):
         for image_url, _alt_text in images:
             file_path, reason, detail = await self._resolve_image_path(image_url)
             if not reason:
-                attachments.append(file_path)
+                attachments.append(_file_to_data_uri(file_path))
                 continue
             skipped[reason] += 1
             logger.warning(*_SKIP_IMAGE_LOG[reason](image_url, detail))
@@ -874,9 +885,10 @@ class SignalAdapter(BasePlatformAdapter):
         return await self._send_file(chat_id, file_path, caption, "RPC send with attachment failed")
 
     async def _send_file(self, chat_id: str, file_path: str, caption: Optional[str], fail_error: str) -> SendResult:
-        """Send one local file as a Signal attachment via the ``send`` RPC."""
+        """Send one local file as a Signal attachment via the ``send`` RPC. The file is embedded
+        as a base64 data URI so the signal-cli daemon does not need access to Hermes' filesystem."""
         params = await self._with_target(
-            {"account": self.account, "message": caption or "", "attachments": [file_path]}, chat_id)
+            {"account": self.account, "message": caption or "", "attachments": [_file_to_data_uri(file_path)]}, chat_id)
         _, err = await self._rpc_send(params, fail_error)
         return err or SendResult(success=True)
 
